@@ -75,29 +75,45 @@
 - [x] Open /dev/ublk-control (Controller.init() - **VM TESTED**)
 - [x] Send ADD_DEV command - **VM TESTED** - creates /dev/ublkcN
 
-## Phase 2: Device Lifecycle
+## Phase 2: Device Lifecycle - COMPLETE ✓ - **VM TESTED**
 
-- [x] ADD_DEV command (creates device, assigns ID)
-- [ ] SET_PARAMS command
-- [ ] GET_DEV_INFO command
-- [ ] START_DEV command
-- [ ] STOP_DEV command
-- [ ] DEL_DEV command
+- [x] ADD_DEV command (creates device, assigns ID) - **VM TESTED**
+- [x] SET_PARAMS command (configure device parameters) - **VM TESTED**
+- [x] GET_DEV_INFO command - **VM TESTED**
+- [x] START_DEV command (requires IO queues first)
+- [x] STOP_DEV command
+- [x] DEL_DEV command - **VM TESTED**
 
-## Phase 3: IO Path
+**Note:** START_DEV can only be called after IO queues submit FETCH_REQ (Phase 3)
 
-- [ ] Queue setup (open /dev/ublkcN, mmap descriptors)
-- [ ] FETCH_REQ submission
-- [ ] Completion handling
-- [ ] COMMIT_AND_FETCH_REQ
-- [ ] Backend interface definition
-- [ ] IO buffer management
+## Phase 3: IO Path - COMPLETE ✓ - **VM TESTED**
+
+- [x] Queue setup (open /dev/ublkcN, mmap descriptors) - **VM TESTED**
+- [x] FETCH_REQ submission - **VM TESTED**
+- [x] Completion handling - **VM TESTED**
+- [x] COMMIT_AND_FETCH_REQ - **VM TESTED**
+- [x] IO buffer management - **VM TESTED**
+- [x] Tag state machine (in_flight_fetch → owned → in_flight_commit)
+
+**Key insight:** Kernel requires queue thread to be in io_uring wait state (io_uring_enter with GETEVENTS) BEFORE START_DEV can complete. Queue must run in separate thread.
 
 ## Phase 4: Backends
 
-- [ ] Null backend (simplest - for testing)
+- [x] Null backend (simplest - for testing) - **VM TESTED** in examples/null.zig
 - [ ] Memory backend (RAM disk)
 - [ ] Loop backend (file-backed)
+
+## Phase 4.5: Code Review - COMPLETE ✓
+
+- [x] Split root.zig into modules:
+  - `uapi.zig` - kernel ABI structs, constants, ioctl encoding, IoOp enum
+  - `params.zig` - UblkParams and related parameter structs
+  - `ring.zig` - IoUring128, IoUringSqe128, IoUringCqe32
+  - `control.zig` - Controller struct
+  - `queue.zig` - Queue struct
+  - `root.zig` - thin re-export layer (~100 lines)
+- [x] Add constants for IO operation codes (IoOp enum in uapi.zig)
+- [x] VM tested - all e2e tests pass
 
 ## Phase 5: Polish
 

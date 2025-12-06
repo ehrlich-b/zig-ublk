@@ -207,7 +207,59 @@ pub const Controller = struct {
 
     pub fn init() !Controller;
     pub fn deinit(self: *Controller) void;
+
+    // Device lifecycle
     pub fn addDevice(self: *Controller, dev_info: *UblksrvCtrlDevInfo) !u32;
+    pub fn setParams(self: *Controller, dev_id: u32, params: *UblkParamsBuffer) !void;
+    pub fn getDeviceInfo(self: *Controller, dev_id: u32, dev_info: *UblksrvCtrlDevInfo) !void;
+    pub fn startDevice(self: *Controller, dev_id: u32) !void;  // Requires IO queues ready
+    pub fn stopDevice(self: *Controller, dev_id: u32) !void;
+    pub fn deleteDevice(self: *Controller, dev_id: u32) !void;
+};
+```
+
+## Implemented: UblkParams (Device Parameters)
+
+```zig
+// Parameter type flags
+pub const UBLK_PARAM_TYPE_BASIC: u32 = 1 << 0;
+pub const UBLK_PARAM_TYPE_DISCARD: u32 = 1 << 1;
+pub const UBLK_PARAM_TYPE_DEVT: u32 = 1 << 2;
+pub const UBLK_PARAM_TYPE_ZONED: u32 = 1 << 3;
+
+// Basic device parameters (32 bytes)
+pub const UblkParamBasic = extern struct {
+    attrs: u32,              // UBLK_ATTR_* flags
+    logical_bs_shift: u8,    // logical block size = 1 << shift
+    physical_bs_shift: u8,
+    io_opt_shift: u8,
+    io_min_shift: u8,
+    max_sectors: u32,
+    chunk_sectors: u32,
+    dev_sectors: u64,        // device size in sectors
+    virt_boundary_mask: u64,
+};
+
+// Combined parameters structure
+pub const UblkParams = extern struct {
+    len: u32,
+    types: u32,              // UBLK_PARAM_TYPE_* flags
+    basic: UblkParamBasic,
+    discard: UblkParamDiscard,
+    devt: UblkParamDevt,
+    zoned: UblkParamZoned,
+
+    pub fn initBasic(device_size_bytes: u64, logical_block_size: u32) UblkParams;
+    pub fn hasBasic(self: UblkParams) bool;
+    // ... other has* methods
+};
+
+// Padded buffer for kernel (128 bytes)
+pub const UblkParamsBuffer = extern struct {
+    params: UblkParams,
+    _padding: [...]u8,
+
+    pub fn init(params: UblkParams) UblkParamsBuffer;
 };
 ```
 
@@ -234,4 +286,9 @@ var dev_info = UblksrvCtrlDevInfo{ ... };
 
 // Send ADD_DEV command via io_uring URING_CMD
 const dev_id = try controller.addDevice(&dev_info);
+
+// Configure device parameters (1GB device, 512-byte blocks)
+const params = UblkParams.initBasic(1024 * 1024 * 1024, 512);
+var params_buf = UblkParamsBuffer.init(params);
+try controller.setParams(dev_id, &params_buf);
 ```

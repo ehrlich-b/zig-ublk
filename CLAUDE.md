@@ -20,12 +20,14 @@ The Go code is not sacred - it's just proof the protocol works. Our goal is clea
 
 - `docs/zig.md` - Zig 0.16 language features, build system, patterns
 - `docs/zig_api.md` - Our specific API surface area, struct definitions, open questions
+- `docs/idioms.md` - Zig idioms translated for high-level language developers
 
 **When in doubt:**
 1. Check `docs/zig.md` for how Zig does things
 2. Check `docs/zig_api.md` for what APIs we're using
-3. Update these docs as we learn more
-4. The stdlib source at `/opt/zig/lib/std/` is the ultimate truth
+3. Check `docs/idioms.md` for "is this idiomatic?"
+4. Update these docs as we learn more
+5. The stdlib source at `/opt/zig/lib/std/` is the ultimate truth
 
 ## Target Versions
 
@@ -84,8 +86,26 @@ When you need protocol details:
 ```bash
 zig build              # Build
 zig build test         # Run tests
-sudo zig build run     # Run (requires root)
+make vm-simple-e2e     # Build, copy to VM, and run e2e test
 ```
+
+## VM Testing
+
+**IMPORTANT:** Never SSH to the VM directly. Always use `make` targets:
+
+```bash
+make vm-check          # Verify VM configuration
+make vm-copy           # Build and copy binary to VM
+make vm-simple-e2e     # Full e2e test on VM
+make vm-reset          # Hard reset VM if stuck
+make vm-trace          # Dump kernel trace from VM
+```
+
+VM configuration is in `Makefile.local` (gitignored).
+
+## Workflow
+
+**Commit early, commit often.** After any meaningful chunk of work, do a single-sentence commit and push. Don't batch up changes.
 
 ## Notes
 
