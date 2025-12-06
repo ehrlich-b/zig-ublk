@@ -98,7 +98,7 @@ vm-benchmark: vm-copy
 vm-fuzz: vm-copy
 	@echo "Running comprehensive fuzz test..."
 	@$(VM_SCP) scripts/vm-fuzz.sh $(VM_USER)@$(VM_HOST):$(VM_DIR)/
-	@timeout 600 $(VM_SSH) "cd $(VM_DIR) && chmod +x ./vm-fuzz.sh && ./vm-fuzz.sh" || \
+	@timeout 900 $(VM_SSH) "cd $(VM_DIR) && chmod +x ./vm-fuzz.sh && ./vm-fuzz.sh" || \
 		(echo "Fuzz test timed out" && exit 1)
 
 # Run stress test (multiple cycles)
@@ -125,6 +125,12 @@ vm-gauntlet: vm-copy
 	@$(MAKE) vm-stress
 	@echo ""
 	@echo "=== GAUNTLET COMPLETE ==="
+
+# Debug - run ad-hoc commands on VM (edit command as needed)
+vm-debug: vm-copy
+	@echo "Running debug test (1MB blocks with verify - should be split to 64KB)..."
+	@$(VM_SSH) "cd $(VM_DIR) && sudo pkill example-memory 2>/dev/null || true; sleep 1; sudo modprobe -r ublk_drv 2>/dev/null || true; sleep 1; sudo modprobe ublk_drv; sleep 1"
+	@timeout 120 $(VM_SSH) "cd $(VM_DIR) && sudo ./example-memory 2>&1 & sleep 5 && echo 'Testing 1MB blocks with verify...' && sudo fio --name=test1mb --filename=/dev/ublkb0 --rw=write --bs=1M --size=16M --ioengine=libaio --direct=1 --verify=crc32c --verify_fatal=1 --do_verify=1 2>&1; echo 'Done'; sudo pkill example-memory || true" || (echo "Debug test timed out or failed")
 
 # Hard reset VM
 vm-reset: vm-check

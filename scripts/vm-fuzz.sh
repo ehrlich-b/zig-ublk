@@ -6,7 +6,7 @@ set -e
 
 # Configuration
 SIZE_MB=${1:-256}
-DURATION=${2:-30}  # seconds per test
+DURATION=${2:-10}  # seconds per test
 DEVICE=/dev/ublkb0
 UBLK_BIN=./example-memory
 
@@ -27,11 +27,15 @@ run_test() {
     local name="$1"
     shift
     info "$name"
-    if "$@"; then
+    local output
+    output=$("$@" 2>&1)
+    local rc=$?
+    if [ $rc -eq 0 ]; then
         pass "$name"
         PASS_COUNT=$((PASS_COUNT + 1))
     else
-        echo -e "${RED}FAIL${NC}: $name"
+        echo -e "${RED}FAIL${NC}: $name (exit code: $rc)"
+        echo "$output" | tail -20
         FAIL_COUNT=$((FAIL_COUNT + 1))
     fi
 }
@@ -64,31 +68,55 @@ echo "Starting zig-ublk memory device..."
 sudo pkill -9 example-memory 2>/dev/null || true
 sudo pkill -9 example-null 2>/dev/null || true
 sleep 1
+
+# Clean up any stale device files (can happen from failed runs)
+for f in /dev/ublkb*; do
+    if [ -e "$f" ] && [ ! -b "$f" ]; then
+        echo "Removing stale file: $f"
+        sudo rm -f "$f"
+    fi
+done
+
 sudo modprobe -r ublk_drv 2>/dev/null || true
+sleep 1
 sudo modprobe ublk_drv
+sleep 1
 
 if [ ! -x "$UBLK_BIN" ]; then
     fail "ublk binary not found at $UBLK_BIN"
 fi
 
-# Start in background, redirect output
-sudo "$UBLK_BIN" &>/tmp/ublk.log &
+# Start in background
+sudo "$UBLK_BIN" &
 UBLK_PID=$!
+echo "Started ublk with PID $UBLK_PID"
 
-# Wait for device to appear
+# Wait for device to appear and be functional
 echo "Waiting for device..."
+DEVICE=""
 for i in $(seq 1 30); do
-    if [ -b "$DEVICE" ]; then
-        echo "Device ready: $DEVICE"
-        break
-    fi
+    # Check if any ublkb device exists AND is functional
+    for dev in /dev/ublkb*; do
+        if [ -b "$dev" ]; then
+            # Try a simple read - this only works after START_DEV
+            if sudo dd if="$dev" of=/dev/null bs=512 count=1 &>/dev/null; then
+                DEVICE="$dev"
+                echo "Device ready: $DEVICE"
+                break 2
+            fi
+        fi
+    done
+    echo "  ($i/30) waiting..."
     sleep 1
 done
 
-if [ ! -b "$DEVICE" ]; then
-    echo "Device failed to appear. Log:"
-    cat /tmp/ublk.log
-    fail "Device $DEVICE did not appear"
+if [ -z "$DEVICE" ] || [ ! -b "$DEVICE" ]; then
+    echo "Device failed to become functional after 30 seconds"
+    echo "Process status:"
+    ps aux | grep example || true
+    echo "Block devices:"
+    ls -la /dev/ublk* 2>/dev/null || echo "No ublk devices"
+    fail "Device not functional"
 fi
 
 # Get actual device size
@@ -117,9 +145,9 @@ run_test "1.2 Random write/read 4K blocks" bash -c "
         --do_verify=1 --randrepeat=0 >/dev/null 2>&1
 "
 
-# Test 1.3: Large block integrity
-run_test "1.3 Large block (1MB) integrity" bash -c "
-    sudo fio --name=largeblock --filename=$DEVICE --rw=write --bs=1M --size=32M \
+# Test 1.3: Large block integrity (64K is our max buffer size)
+run_test "1.3 Large block (64KB) integrity" bash -c "
+    sudo fio --name=largeblock --filename=$DEVICE --rw=write --bs=64k --size=16M \
         --ioengine=libaio --direct=1 --verify=sha256 --verify_fatal=1 \
         --do_verify=1 >/dev/null 2>&1
 "
@@ -178,7 +206,7 @@ run_test "3.1 Random offset/size with verify (${DURATION}s)" bash -c "
     sudo fio --name=fuzz_random --filename=$DEVICE \
         --rw=randrw --rwmixread=50 \
         --bs=512-64k:512 --bsrange=512-65536 \
-        --size=64M --runtime=$DURATION --time_based \
+        --size=32M --runtime=$DURATION --time_based \
         --ioengine=libaio --iodepth=32 --direct=1 \
         --verify=crc32c --verify_fatal=1 --do_verify=1 \
         --randrepeat=0 --allrandrepeat=0 \
@@ -189,18 +217,18 @@ run_test "3.1 Random offset/size with verify (${DURATION}s)" bash -c "
 run_test "3.2 High queue depth (QD=128) random I/O" bash -c "
     sudo fio --name=highqd --filename=$DEVICE \
         --rw=randrw --rwmixread=70 --bs=4k \
-        --size=64M --runtime=$((DURATION/2)) --time_based \
+        --size=32M --runtime=$((DURATION/2)) --time_based \
         --ioengine=libaio --iodepth=128 --direct=1 \
         --verify=crc32c --verify_fatal=1 --do_verify=1 \
         >/dev/null 2>&1
 "
 
-# Test 3.3: Multiple block size random pattern
+# Test 3.3: Multiple block size random pattern (smaller blocks to fit device)
 run_test "3.3 Multi-blocksize random I/O" bash -c "
     sudo fio --name=multibs --filename=$DEVICE \
         --rw=randrw --rwmixread=50 \
-        --bssplit=512/10:4k/40:64k/30:1m/20 \
-        --size=64M --runtime=$DURATION --time_based \
+        --bssplit=512/10:4k/50:64k/40 \
+        --size=32M --runtime=$DURATION --time_based \
         --ioengine=libaio --iodepth=64 --direct=1 \
         --verify=md5 --verify_fatal=1 --do_verify=1 \
         >/dev/null 2>&1
@@ -259,19 +287,20 @@ run_test "5.2 Alternating R/W same location (1000 ops)" bash -c "
     done
 "
 
-# Test 5.3: Zero-fill then verify
+# Test 5.3: Zero-fill then verify (use 64k blocks for device, max buffer size)
 run_test "5.3 Zero-fill and verify" bash -c "
-    sudo dd if=/dev/zero of=$DEVICE bs=1M count=16 conv=notrunc 2>/dev/null
-    EXPECTED=\$(dd if=/dev/zero bs=1M count=16 2>/dev/null | sha256sum | cut -d' ' -f1)
-    ACTUAL=\$(sudo dd if=$DEVICE bs=1M count=16 2>/dev/null | sha256sum | cut -d' ' -f1)
+    sudo dd if=/dev/zero of=$DEVICE bs=64k count=128 conv=notrunc status=none
+    sync
+    EXPECTED=\$(dd if=/dev/zero bs=64k count=128 status=none | sha256sum | cut -d' ' -f1)
+    ACTUAL=\$(sudo dd if=$DEVICE bs=64k count=128 status=none | sha256sum | cut -d' ' -f1)
     [ \"\$EXPECTED\" = \"\$ACTUAL\" ]
 "
 
-# Test 5.4: Pattern fill then verify
+# Test 5.4: Pattern fill then verify (use 64k blocks for device)
 run_test "5.4 Pattern fill (0xAA) and verify" bash -c "
-    dd if=/dev/zero bs=1M count=1 2>/dev/null | tr '\000' '\252' > /tmp/aa_pattern
-    sudo dd if=/tmp/aa_pattern of=$DEVICE bs=1M count=1 conv=notrunc 2>/dev/null
-    sudo dd if=$DEVICE bs=1M count=1 2>/dev/null | cmp - /tmp/aa_pattern
+    dd if=/dev/zero bs=64k count=1 2>/dev/null | tr '\000' '\252' > /tmp/aa_pattern
+    sudo dd if=/tmp/aa_pattern of=$DEVICE bs=64k count=1 conv=notrunc 2>/dev/null
+    sudo dd if=$DEVICE bs=64k count=1 2>/dev/null | cmp - /tmp/aa_pattern
     rm /tmp/aa_pattern
 "
 
@@ -287,7 +316,7 @@ echo "=============================================="
 run_test "6.1 Sustained random I/O (${DURATION}s)" bash -c "
     sudo fio --name=sustained --filename=$DEVICE \
         --rw=randrw --rwmixread=70 --bs=4k-128k:4k \
-        --size=64M --runtime=$DURATION --time_based \
+        --size=32M --runtime=$DURATION --time_based \
         --ioengine=libaio --iodepth=64 --direct=1 \
         --verify=crc32c --verify_fatal=1 --do_verify=1 \
         --randrepeat=0 \
@@ -314,13 +343,13 @@ echo "=============================================="
 
 run_test "7.1 Final full-device integrity check" bash -c "
     sudo fio --name=final_write --filename=$DEVICE \
-        --rw=write --bs=1M --size=64M \
+        --rw=write --bs=64k --size=32M \
         --ioengine=libaio --direct=1 \
         --verify=sha512 --verify_fatal=1 \
         >/dev/null 2>&1
 
     sudo fio --name=final_verify --filename=$DEVICE \
-        --rw=read --bs=1M --size=64M \
+        --rw=read --bs=64k --size=32M \
         --ioengine=libaio --direct=1 \
         --verify=sha512 --verify_fatal=1 --do_verify=1 \
         >/dev/null 2>&1

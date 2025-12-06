@@ -115,8 +115,9 @@ fn queueThread(ctx: *QueueContext) void {
         };
         io_count += processed;
 
-        if (processed > 0) {
-            std.debug.print("Queue thread: processed {d} IOs (total: {d})\n", .{ processed, io_count });
+        // Only log periodically to avoid flooding output
+        if (io_count > 0 and io_count % 10000 == 0) {
+            std.debug.print("Queue thread: {d} IOs completed\n", .{io_count});
         }
     }
     std.debug.print("Queue thread: exiting\n", .{});
@@ -170,7 +171,7 @@ pub fn main() !void {
     var dev_info = std.mem.zeroInit(ublk.UblksrvCtrlDevInfo, .{});
     dev_info.nr_hw_queues = 1;
     dev_info.queue_depth = 64;
-    dev_info.max_io_buf_bytes = 512 * 1024;
+    dev_info.max_io_buf_bytes = 64 * 1024; // Must match IO_BUFFER_SIZE_PER_TAG
     dev_info.dev_id = 0xFFFF_FFFF;
     dev_info.ublksrv_pid = @as(i32, @intCast(std.os.linux.getpid()));
     dev_info.flags = 0x02; // UBLK_F_CMD_IOCTL_ENCODE only
