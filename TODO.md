@@ -17,8 +17,9 @@
 - [x] **PROBLEM:** stdlib cqe is 16 bytes - SOLVED with custom IoUringCqe32
 - [x] stdlib IoUring.init_params does NOT work for SQE128 (wrong mmap size)
 - [x] Implemented: `IoUring128` - raw io_uring wrapper for SQE128/CQE32
+- [x] **Confirmed:** stdlib limitation is a known gap - PR #13986 attempted fix but was abandoned
 
-**Solution:** Created `IoUring128` in src/root.zig that:
+**Solution:** Created `IoUring128` in src/ring.zig that:
 - Uses raw `io_uring_setup` syscall with correct flags
 - mmaps SQEs at 128 bytes per entry
 - mmaps CQEs at 32 bytes per entry

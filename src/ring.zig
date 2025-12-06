@@ -6,6 +6,7 @@
 
 const std = @import("std");
 const linux = std.os.linux;
+const assert = std.debug.assert;
 
 // ============================================================================
 // 128-byte SQE
@@ -94,9 +95,7 @@ pub const IoUringSqe128 = extern struct {
     }
 
     comptime {
-        if (@sizeOf(IoUringSqe128) != 128) {
-            @compileError("IoUringSqe128 must be exactly 128 bytes");
-        }
+        assert(@sizeOf(IoUringSqe128) == 128);
     }
 };
 
@@ -122,9 +121,7 @@ pub const IoUringCqe32 = extern struct {
     }
 
     comptime {
-        if (@sizeOf(IoUringCqe32) != 32) {
-            @compileError("IoUringCqe32 must be exactly 32 bytes");
-        }
+        assert(@sizeOf(IoUringCqe32) == 32);
     }
 };
 
