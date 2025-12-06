@@ -19,6 +19,19 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_lib_tests.step);
 
+    // Documentation generation
+    const lib_obj = b.addObject(.{
+        .name = "zig_ublk",
+        .root_module = lib_mod,
+    });
+    const install_docs = b.addInstallDirectory(.{
+        .source_dir = lib_obj.getEmittedDocs(),
+        .install_dir = .prefix,
+        .install_subdir = "docs",
+    });
+    const docs_step = b.step("docs", "Generate API documentation");
+    docs_step.dependOn(&install_docs.step);
+
     // Example: null device
     const example_null = b.addExecutable(.{
         .name = "example-null",

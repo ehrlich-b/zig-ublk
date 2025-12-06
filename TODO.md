@@ -119,8 +119,8 @@
 
 - [x] Benchmarks vs go-ublk - **118K IOPS** (zig-ublk) vs ~100K IOPS (go-ublk documented)
 - [x] Examples with documentation - README.md updated, examples/README.md added
-- [ ] Test suite
-- [ ] API documentation
+- [x] Test suite - unit tests for ioctl encoding, ring module, uapi enums (requires root for integration tests)
+- [x] API documentation - `zig build docs` generates HTML docs in zig-out/docs/
 
 ### Benchmark Results (2025-12-06)
 
