@@ -101,7 +101,7 @@
 ## Phase 4: Backends
 
 - [x] Null backend (simplest - for testing) - **VM TESTED** in examples/null.zig
-- [ ] Memory backend (RAM disk)
+- [x] Memory backend (RAM disk) - **VM TESTED** in examples/memory.zig
 - [ ] Loop backend (file-backed)
 
 ## Phase 4.5: Code Review - COMPLETE ✓

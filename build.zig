@@ -36,4 +36,22 @@ pub fn build(b: *std.Build) void {
     const run_example_null = b.addRunArtifact(example_null);
     const run_example_null_step = b.step("run-example-null", "Run the null device example");
     run_example_null_step.dependOn(&run_example_null.step);
+
+    // Example: memory device (RAM disk)
+    const example_memory = b.addExecutable(.{
+        .name = "example-memory",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/memory.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "zig_ublk", .module = lib_mod },
+            },
+        }),
+    });
+    b.installArtifact(example_memory);
+
+    const run_example_memory = b.addRunArtifact(example_memory);
+    const run_example_memory_step = b.step("run-example-memory", "Run the memory device example");
+    run_example_memory_step.dependOn(&run_example_memory.step);
 }

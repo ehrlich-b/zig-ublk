@@ -68,16 +68,23 @@ vm-check:
 
 # Copy binary to VM
 vm-copy: vm-check build-vm
-	@echo "Copying zig-ublk binary to VM..."
-	@$(VM_SSH) "mkdir -p $(VM_DIR); sudo killall example-null 2>/dev/null || true"
-	@$(VM_SCP) zig-out/bin/example-null $(VM_USER)@$(VM_HOST):$(VM_DIR)/
+	@echo "Copying zig-ublk binaries to VM..."
+	@$(VM_SSH) "mkdir -p $(VM_DIR); sudo killall example-null example-memory 2>/dev/null || true"
+	@$(VM_SCP) zig-out/bin/example-null zig-out/bin/example-memory $(VM_USER)@$(VM_HOST):$(VM_DIR)/
 	@echo "Copied."
 
-# Run simple e2e test on VM
+# Run simple e2e test on VM (null backend)
 vm-simple-e2e: vm-copy
-	@echo "Running simple I/O test..."
+	@echo "Running simple I/O test (null backend)..."
 	@$(VM_SCP) scripts/vm-simple-e2e.sh $(VM_USER)@$(VM_HOST):$(VM_DIR)/
 	@timeout 60 $(VM_SSH) "cd $(VM_DIR) && chmod +x ./vm-simple-e2e.sh && ./vm-simple-e2e.sh" || \
+		(echo "Test timed out" && $(MAKE) vm-trace && exit 1)
+
+# Run memory backend e2e test on VM
+vm-memory-e2e: vm-copy
+	@echo "Running memory backend I/O test (RAM disk)..."
+	@$(VM_SCP) scripts/vm-memory-e2e.sh $(VM_USER)@$(VM_HOST):$(VM_DIR)/
+	@timeout 60 $(VM_SSH) "cd $(VM_DIR) && chmod +x ./vm-memory-e2e.sh && ./vm-memory-e2e.sh" || \
 		(echo "Test timed out" && $(MAKE) vm-trace && exit 1)
 
 # Hard reset VM
@@ -118,8 +125,9 @@ help:
 	@echo ""
 	@echo "VM targets (require Makefile.local):"
 	@echo "  vm-check       Verify VM configuration"
-	@echo "  vm-copy        Copy binary to VM"
-	@echo "  vm-simple-e2e  Run simple I/O test on VM"
+	@echo "  vm-copy        Copy binaries to VM"
+	@echo "  vm-simple-e2e  Run null backend I/O test on VM"
+	@echo "  vm-memory-e2e  Run memory backend I/O test on VM"
 	@echo "  vm-reset       Hard reset VM"
 	@echo ""
 	@echo "See docs/VM_TESTING.md for VM setup instructions."
