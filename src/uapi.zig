@@ -204,4 +204,63 @@ test "IoOp enum values" {
     try std.testing.expectEqual(@as(u8, 0), @intFromEnum(IoOp.read));
     try std.testing.expectEqual(@as(u8, 1), @intFromEnum(IoOp.write));
     try std.testing.expectEqual(@as(u8, 2), @intFromEnum(IoOp.flush));
+    try std.testing.expectEqual(@as(u8, 3), @intFromEnum(IoOp.discard));
+    try std.testing.expectEqual(@as(u8, 9), @intFromEnum(IoOp.write_zeroes));
+}
+
+test "ioctl encoding for control commands" {
+    // Format: (dir << 30) | (size << 16) | ('u' << 8) | nr
+    // dir = IOC_READ | IOC_WRITE = 3, size = 32, type = 'u' (0x75)
+
+    // ADD_DEV: nr=0x04
+    const add_dev = ublkCtrlCmd(.add_dev);
+    try std.testing.expectEqual(@as(u32, 0xc0207504), add_dev);
+
+    // DEL_DEV: nr=0x05
+    const del_dev = ublkCtrlCmd(.del_dev);
+    try std.testing.expectEqual(@as(u32, 0xc0207505), del_dev);
+
+    // START_DEV: nr=0x06
+    const start_dev = ublkCtrlCmd(.start_dev);
+    try std.testing.expectEqual(@as(u32, 0xc0207506), start_dev);
+
+    // SET_PARAMS: nr=0x08
+    const set_params = ublkCtrlCmd(.set_params);
+    try std.testing.expectEqual(@as(u32, 0xc0207508), set_params);
+}
+
+test "ioctl encoding for IO commands" {
+    // Format: (dir << 30) | (size << 16) | ('u' << 8) | nr
+    // dir = IOC_READ | IOC_WRITE = 3, size = 16, type = 'u' (0x75)
+
+    // FETCH_REQ: nr=0x20
+    const fetch_req = ublkIoCmd(.fetch_req);
+    try std.testing.expectEqual(@as(u32, 0xc0107520), fetch_req);
+
+    // COMMIT_AND_FETCH_REQ: nr=0x21
+    const commit_fetch = ublkIoCmd(.commit_and_fetch_req);
+    try std.testing.expectEqual(@as(u32, 0xc0107521), commit_fetch);
+}
+
+test "IoDesc getIoOp returns null for unknown ops" {
+    const desc = UblksrvIoDesc{
+        .op_flags = 0xFF, // Unknown op code
+        .nr_sectors = 0,
+        .start_sector = 0,
+        .addr = 0,
+    };
+    try std.testing.expectEqual(@as(?IoOp, null), desc.getIoOp());
+}
+
+test "CtrlCmd enum values" {
+    try std.testing.expectEqual(@as(u8, 0x04), @intFromEnum(CtrlCmd.add_dev));
+    try std.testing.expectEqual(@as(u8, 0x05), @intFromEnum(CtrlCmd.del_dev));
+    try std.testing.expectEqual(@as(u8, 0x06), @intFromEnum(CtrlCmd.start_dev));
+    try std.testing.expectEqual(@as(u8, 0x07), @intFromEnum(CtrlCmd.stop_dev));
+    try std.testing.expectEqual(@as(u8, 0x08), @intFromEnum(CtrlCmd.set_params));
+}
+
+test "IoCmd enum values" {
+    try std.testing.expectEqual(@as(u8, 0x20), @intFromEnum(IoCmd.fetch_req));
+    try std.testing.expectEqual(@as(u8, 0x21), @intFromEnum(IoCmd.commit_and_fetch_req));
 }

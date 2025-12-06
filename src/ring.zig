@@ -394,3 +394,46 @@ test "io_uring constants available" {
     // URING_CMD is opcode 46 in modern kernels (was 27 in early versions)
     try std.testing.expectEqual(@as(u8, 46), @intFromEnum(linux.IORING_OP.URING_CMD));
 }
+
+test "SQE128 prepUringCmd" {
+    var sqe: IoUringSqe128 = undefined;
+    const cmd_op: u32 = 0xc0207504; // ADD_DEV ioctl
+    const target_fd: i32 = 5;
+
+    sqe.prepUringCmd(cmd_op, target_fd);
+
+    try std.testing.expectEqual(linux.IORING_OP.URING_CMD, sqe.opcode);
+    try std.testing.expectEqual(@as(i32, 5), sqe.fd);
+    try std.testing.expectEqual(@as(u64, 0xc0207504), sqe.off);
+    try std.testing.expectEqual(@as(u8, 0), sqe.flags);
+}
+
+test "CQE32 err() success" {
+    const cqe = IoUringCqe32{
+        .user_data = 0,
+        .res = 0, // Success
+        .flags = 0,
+        .big_cqe = [_]u8{0} ** 16,
+    };
+    try std.testing.expectEqual(linux.E.SUCCESS, cqe.err());
+}
+
+test "CQE32 err() with errno" {
+    const cqe = IoUringCqe32{
+        .user_data = 0,
+        .res = -22, // -EINVAL
+        .flags = 0,
+        .big_cqe = [_]u8{0} ** 16,
+    };
+    try std.testing.expectEqual(linux.E.INVAL, cqe.err());
+}
+
+test "CQE32 err() with ENODEV" {
+    const cqe = IoUringCqe32{
+        .user_data = 0,
+        .res = -19, // -ENODEV
+        .flags = 0,
+        .big_cqe = [_]u8{0} ** 16,
+    };
+    try std.testing.expectEqual(linux.E.NODEV, cqe.err());
+}
