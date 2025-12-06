@@ -118,7 +118,7 @@
 ## Phase 5: Polish
 
 - [x] Benchmarks vs go-ublk - **118K IOPS** (zig-ublk) vs ~100K IOPS (go-ublk documented)
-- [ ] Examples with documentation
+- [x] Examples with documentation - README.md updated, examples/README.md added
 - [ ] Test suite
 - [ ] API documentation
 

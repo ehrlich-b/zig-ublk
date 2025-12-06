@@ -15,7 +15,10 @@ ublk is a Linux kernel feature (6.0+) for creating block devices in userspace. T
 
 ## Status
 
-**Early development** - Currently in Phase 0 (Zig Bootcamp), learning the Zig APIs we need.
+**Functional** - Core implementation complete with VM-tested backends.
+
+- Null backend: discards writes, returns zeros (118K IOPS benchmarked)
+- Memory backend: RAM-backed block device
 
 Based on the working Go implementation at [go-ublk](https://github.com/ehrlich-b/go-ublk).
 
@@ -24,7 +27,7 @@ Based on the working Go implementation at [go-ublk](https://github.com/ehrlich-b
 - Linux kernel >= 6.0 (6.8+ recommended)
 - `ublk_drv` module loaded (`modprobe ublk_drv`)
 - Root or CAP_SYS_ADMIN privileges
-- Zig 0.13+
+- Zig 0.16+
 
 ## Quick Start
 
@@ -45,24 +48,62 @@ sudo zig build run-example-null
 ## Usage
 
 ```zig
-const ublk = @import("zig-ublk");
+const std = @import("std");
+const ublk = @import("zig_ublk");
+
+fn myHandler(queue: *ublk.Queue, tag: u16, desc: ublk.UblksrvIoDesc, buffer: []u8) i32 {
+    // Handle READ/WRITE/FLUSH/DISCARD operations
+    const op = desc.getIoOp() orelse return -5;
+    switch (op) {
+        .read => @memset(buffer[0..desc.nr_sectors * 512], 0),
+        .write, .flush, .discard => {},
+        else => return -95, // EOPNOTSUPP
+    }
+    return 0; // Success
+}
 
 pub fn main() !void {
-    // Create a null block device (discards all writes, returns zeros on read)
-    var device = try ublk.create(.{
-        .size = 1024 * 1024 * 1024, // 1GB
-        .backend = ublk.NullBackend{},
-    });
-    defer device.destroy();
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = gpa.allocator();
 
-    try device.start();
-    // Device is now available at /dev/ublkbN
+    // 1. Initialize controller
+    var ctrl = try ublk.Controller.init();
+    defer ctrl.deinit();
 
-    // ... wait for signal ...
+    // 2. Create device
+    var dev_info = std.mem.zeroInit(ublk.UblksrvCtrlDevInfo, .{});
+    dev_info.nr_hw_queues = 1;
+    dev_info.queue_depth = 64;
+    dev_info.max_io_buf_bytes = 512 * 1024;
+    dev_info.dev_id = 0xFFFF_FFFF; // Auto-assign
+    dev_info.ublksrv_pid = @intCast(std.os.linux.getpid());
+    dev_info.flags = 0x02; // UBLK_F_CMD_IOCTL_ENCODE
 
-    try device.stop();
+    const dev_id = try ctrl.addDevice(&dev_info);
+    defer ctrl.deleteDevice(dev_id) catch {};
+
+    // 3. Set parameters
+    const params = ublk.UblkParams.initBasic(256 * 1024 * 1024, 512); // 256MB
+    var params_buf = ublk.UblkParamsBuffer.init(params);
+    try ctrl.setParams(dev_id, &params_buf);
+
+    // 4. Setup queue (must be in separate thread for START_DEV to work)
+    var queue = try ublk.Queue.init(dev_id, 0, 64, allocator);
+    defer queue.deinit(allocator);
+
+    // 5. Prime queue and start device
+    try queue.prime();
+    try ctrl.startDevice(dev_id);
+    defer ctrl.stopDevice(dev_id) catch {};
+
+    // 6. Process IO in loop
+    while (running) {
+        _ = try queue.processCompletions(myHandler);
+    }
 }
 ```
+
+See `examples/` for complete working implementations.
 
 ## Architecture
 
