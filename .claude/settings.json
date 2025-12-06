@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(make:*)",
+      "Bash(zig:*)",
+      "Bash(rm -f:*)",
+      "Bash(rm -rf zig-out:*)",
+      "Bash(rm -rf .zig-cache:*)",
+      "Bash(rm -rf zig-cache:*)",
+      "Bash(cat:*)",
+      "Bash(ls:*)",
+      "Bash(mkdir:*)",
+      "Bash(find:*)"
+    ]
+  }
+}

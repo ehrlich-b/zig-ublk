@@ -1,0 +1,10 @@
+# VM Configuration for zig-ublk testing
+# Copy this to Makefile.local and edit with your VM details
+
+VM_HOST = 192.168.1.100
+VM_USER = ubuntu
+VM_PASS = yourpassword
+
+# Or use SSH keys (leave VM_PASS empty)
+# VM_HOST = 192.168.1.100
+# VM_USER = ubuntu

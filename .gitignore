@@ -1,0 +1,16 @@
+# Zig build artifacts
+zig-out/
+zig-cache/
+.zig-cache/
+
+# Go reference repo (cloned for protocol reference)
+.go-ublk-ref/
+
+# Local config (contains VM credentials)
+Makefile.local
+
+# Editor
+*.swp
+*~
+.vscode/
+.idea/
