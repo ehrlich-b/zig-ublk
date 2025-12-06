@@ -94,6 +94,38 @@ vm-benchmark: vm-copy
 	@timeout 120 $(VM_SSH) "cd $(VM_DIR) && chmod +x ./vm-benchmark.sh && ./vm-benchmark.sh" || \
 		(echo "Benchmark timed out" && exit 1)
 
+# Run comprehensive fuzz test
+vm-fuzz: vm-copy
+	@echo "Running comprehensive fuzz test..."
+	@$(VM_SCP) scripts/vm-fuzz.sh $(VM_USER)@$(VM_HOST):$(VM_DIR)/
+	@timeout 600 $(VM_SSH) "cd $(VM_DIR) && chmod +x ./vm-fuzz.sh && ./vm-fuzz.sh" || \
+		(echo "Fuzz test timed out" && exit 1)
+
+# Run stress test (multiple cycles)
+vm-stress: vm-copy
+	@echo "Running stress test (5 cycles)..."
+	@$(VM_SCP) scripts/vm-stress.sh scripts/vm-memory-e2e.sh scripts/vm-benchmark.sh $(VM_USER)@$(VM_HOST):$(VM_DIR)/
+	@timeout 900 $(VM_SSH) "cd $(VM_DIR) && chmod +x ./vm-stress.sh ./vm-memory-e2e.sh ./vm-benchmark.sh && ./vm-stress.sh 5" || \
+		(echo "Stress test timed out" && exit 1)
+
+# Run the full gauntlet (e2e + fuzz + stress)
+vm-gauntlet: vm-copy
+	@echo "=== RUNNING THE GAUNTLET ==="
+	@echo ""
+	@echo "[1/4] Simple E2E test..."
+	@$(MAKE) vm-simple-e2e
+	@echo ""
+	@echo "[2/4] Memory E2E test..."
+	@$(MAKE) vm-memory-e2e
+	@echo ""
+	@echo "[3/4] Fuzz test..."
+	@$(MAKE) vm-fuzz
+	@echo ""
+	@echo "[4/4] Stress test..."
+	@$(MAKE) vm-stress
+	@echo ""
+	@echo "=== GAUNTLET COMPLETE ==="
+
 # Hard reset VM
 vm-reset: vm-check
 	@echo "Hard reset VM..."
@@ -135,6 +167,10 @@ help:
 	@echo "  vm-copy        Copy binaries to VM"
 	@echo "  vm-simple-e2e  Run null backend I/O test on VM"
 	@echo "  vm-memory-e2e  Run memory backend I/O test on VM"
+	@echo "  vm-benchmark   Run IOPS benchmark"
+	@echo "  vm-fuzz        Run comprehensive fuzz test (data integrity, edge cases)"
+	@echo "  vm-stress      Run stress test (5 cycles of e2e + benchmark)"
+	@echo "  vm-gauntlet    Run ALL tests (e2e + fuzz + stress)"
 	@echo "  vm-reset       Hard reset VM"
 	@echo ""
 	@echo "See docs/VM_TESTING.md for VM setup instructions."
