@@ -156,61 +156,82 @@ pub const UblksrvCtrlDevInfo = extern struct {
 };
 ```
 
-### 128-byte SQE (custom)
+## Implemented: IoUring128
+
+We implemented a custom io_uring wrapper that properly handles SQE128/CQE32:
 
 ```zig
-/// Extended SQE for URING_CMD operations
-/// First 64 bytes match linux.io_uring_sqe
-/// Bytes 48-127 are the cmd area (80 bytes)
-pub const IoUringSqe128 = extern struct {
-    // Standard SQE fields (bytes 0-47)
-    opcode: linux.IORING_OP,
-    flags: u8,
-    ioprio: u16,
-    fd: i32,
-    off: u64,
-    addr: u64,
-    len: u32,
-    rw_flags: u32,
-    user_data: u64,
-    buf_index: u16,
-    personality: u16,
-    splice_fd_in: i32,
+// IoUring128 - raw io_uring for URING_CMD
+pub const IoUring128 = struct {
+    fd: linux.fd_t,
+    sq_ring: []align(page_size_min) u8,
+    sqes_mmap: []align(page_size_min) u8,
+    sqes: []IoUringSqe128,
+    cqes: []IoUringCqe32,
+    // ... ring pointers and tracking
 
-    // Extended area (bytes 48-127)
-    // For URING_CMD: bytes 48-51 are cmd_op
-    cmd_op: u32,
-    __pad1: u32,
-    cmd: [72]u8,  // remaining cmd area
+    pub fn init(entries: u16) !IoUring128;
+    pub fn deinit(self: *IoUring128) void;
+    pub fn getSqe(self: *IoUring128) !*IoUringSqe128;
+    pub fn submit(self: *IoUring128) !u32;
+    pub fn submitAndWait(self: *IoUring128, wait_nr: u32) !u32;
+    pub fn copyCqes(self: *IoUring128, cqes: []IoUringCqe32) u32;
+    pub fn cqReady(self: *IoUring128) u32;
 };
-comptime {
-    std.debug.assert(@sizeOf(IoUringSqe128) == 128);
-}
+
+// 128-byte SQE with getCmd() helper
+pub const IoUringSqe128 = extern struct {
+    // ... standard SQE fields (bytes 0-47)
+    // ... extended fields including 80-byte cmd area
+
+    pub fn getCmd(self: *IoUringSqe128, comptime T: type) *T;
+    pub fn prepUringCmd(self: *IoUringSqe128, cmd_op: u32, target_fd: i32) void;
+};
+
+// 32-byte CQE
+pub const IoUringCqe32 = extern struct {
+    user_data: u64,
+    res: i32,
+    flags: u32,
+    big_cqe: [16]u8,
+};
 ```
 
-## Open Questions
-
-1. **Can we use IoUring.init_params with SQE128 flag?**
-   - The wrapper mmaps based on params, but does it handle 128-byte SQEs?
-   - Probably not - sqes slice is `[]io_uring_sqe` (64 bytes each)
-
-2. **Do we need raw mmap?**
-   - Likely yes, to get proper 128-byte SQE slots
-   - Or we cast/overlay our struct on the memory
-
-3. **CQE32 handling?**
-   - Stdlib cqe is 16 bytes
-   - We need to handle the extra 16 bytes (big_cqe field)
-
-## Usage Pattern (Proposed)
+## Implemented: Controller
 
 ```zig
-// Option A: Raw syscalls (full control)
-const ring_fd = linux.io_uring_setup(entries, &params);
-// mmap SQ, CQ, SQEs ourselves with correct sizes
+// Controller for /dev/ublk-control operations
+pub const Controller = struct {
+    control_fd: std.posix.fd_t,
+    ring: IoUring128,
 
-// Option B: Hybrid (use IoUring, overlay our structs)
-var ring = try IoUring.init_params(entries, &params);
-// Cast sqes to our 128-byte version
-const sqe128 = @ptrCast(*IoUringSqe128, ring.sq.sqes.ptr);
+    pub fn init() !Controller;
+    pub fn deinit(self: *Controller) void;
+    pub fn addDevice(self: *Controller, dev_info: *UblksrvCtrlDevInfo) !u32;
+};
+```
+
+## Resolved Questions
+
+1. **Can we use IoUring.init_params with SQE128 flag?**
+   - **NO** - stdlib mmaps 64 bytes/SQE, we need 128
+
+2. **Do we need raw mmap?**
+   - **YES** - implemented in IoUring128.init()
+
+3. **CQE32 handling?**
+   - **SOLVED** - IoUringCqe32 with 16-byte big_cqe field
+
+## Usage Pattern (Actual)
+
+```zig
+// Open control device and create io_uring
+var controller = try Controller.init();
+defer controller.deinit();
+
+// Prepare device info
+var dev_info = UblksrvCtrlDevInfo{ ... };
+
+// Send ADD_DEV command via io_uring URING_CMD
+const dev_id = try controller.addDevice(&dev_info);
 ```

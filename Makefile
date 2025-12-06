@@ -12,6 +12,10 @@
 build:
 	zig build
 
+# Build for VM (baseline x86_64, no fancy CPU features)
+build-vm:
+	zig build -Dcpu=baseline
+
 test:
 	zig build test
 
@@ -63,7 +67,7 @@ vm-check:
 	@echo "VM configured: $(VM_USER)@$(VM_HOST)"
 
 # Copy binary to VM
-vm-copy: vm-check build
+vm-copy: vm-check build-vm
 	@echo "Copying zig-ublk binary to VM..."
 	@$(VM_SSH) "mkdir -p $(VM_DIR); sudo killall example-null 2>/dev/null || true"
 	@$(VM_SCP) zig-out/bin/example-null $(VM_USER)@$(VM_HOST):$(VM_DIR)/

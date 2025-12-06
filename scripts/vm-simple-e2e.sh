@@ -5,14 +5,6 @@
 set -euo pipefail
 
 echo "=== ZIG-UBLK SIMPLE E2E TEST ==="
-echo "Status: Not yet implemented"
-echo ""
-echo "This script will eventually:"
-echo "1. Ensure ublk_drv module is loaded"
-echo "2. Start example-null device"
-echo "3. Perform basic I/O test"
-echo "4. Verify data integrity"
-echo "5. Clean up"
 echo ""
 
 # Check ublk module
@@ -24,15 +16,21 @@ if ! lsmod | grep -q ublk_drv; then
         exit 1
     }
 fi
-echo "ublk_drv loaded"
+echo "✓ ublk_drv loaded"
 
 # Check control device
 if [ ! -e /dev/ublk-control ]; then
     echo "ERROR: /dev/ublk-control not found"
     exit 1
 fi
-echo "/dev/ublk-control exists"
+echo "✓ /dev/ublk-control exists"
 
 echo ""
-echo "=== PREREQUISITES MET ==="
-echo "Ready to test when zig-ublk is implemented!"
+echo "=== RUNNING EXAMPLE-NULL ==="
+echo ""
+
+# Run the binary (requires sudo for io_uring setup)
+sudo ./example-null
+
+echo ""
+echo "=== TEST COMPLETE ==="

@@ -249,22 +249,37 @@ var ring = try IoUring.init_params(32, &params);
 
 ## Memory Barriers
 
-For io_uring, we need memory barriers between user/kernel:
+For io_uring, we need memory barriers between user/kernel.
+
+**IMPORTANT:** Zig 0.16 removed `@fence()`. Use atomic operations with ordering instead:
 
 ```zig
-// Zig's atomic fence
-@fence(.seq_cst);  // Full barrier
-@fence(.release);  // Store barrier
-@fence(.acquire);  // Load barrier
+// Zig 0.16+ - use atomic operations directly
+_ = @atomicLoad(u32, ptr, .acquire);    // Load with acquire semantics
+@atomicStore(u32, ptr, value, .release); // Store with release semantics
 
-// Or use atomic operations
-_ = @atomicLoad(u32, ptr, .acquire);
-@atomicStore(u32, ptr, value, .release);
+// The ordering ensures:
+// - .acquire: all subsequent reads see writes before this load
+// - .release: all prior writes are visible before this store
 ```
 
-## Next Steps to Research
+## SQE128/CQE32 Support (SOLVED)
 
-- [ ] Test if IoUring.init_params with SQE128 flag actually works
-- [ ] Understand how to access the extra 64 bytes of SQE128
-- [ ] Figure out CQE32 handling (stdlib cqe is 16 bytes)
+The stdlib IoUring does NOT support SQE128/CQE32:
+- It mmaps `sq_entries * @sizeOf(io_uring_sqe)` = 64 bytes per SQE
+- It mmaps `cq_entries * @sizeOf(io_uring_cqe)` = 16 bytes per CQE
+
+**Our solution:** `IoUring128` in src/root.zig
+- Uses raw `io_uring_setup` syscall with SQE128|CQE32 flags
+- mmaps with correct sizes (128 bytes/SQE, 32 bytes/CQE)
+- Defines custom `IoUringSqe128` and `IoUringCqe32` structs
+
+## Resolved Questions
+
+- [x] Test if IoUring.init_params with SQE128 flag actually works
+  - **Answer:** It doesn't - the mmap size calculation is wrong
+- [x] Understand how to access the extra 64 bytes of SQE128
+  - **Answer:** The cmd area is bytes 48-127. Use `sqe.getCmd(T)` helper
+- [x] Figure out CQE32 handling (stdlib cqe is 16 bytes)
+  - **Answer:** Created IoUringCqe32 with 16-byte `big_cqe` field
 - [ ] Test extern struct alignment matches kernel expectations
