@@ -86,8 +86,6 @@ pub const Controller = struct {
 
         const cqe = cqes[0];
         if (cqe.res < 0) {
-            // Kernel returned error
-            std.log.err("ADD_DEV failed with error: {d}", .{cqe.res});
             return error.AddDeviceFailed;
         }
 
@@ -126,7 +124,6 @@ pub const Controller = struct {
 
         const cqe = cqes[0];
         if (cqe.res < 0) {
-            std.log.err("SET_PARAMS failed with error: {d}", .{cqe.res});
             return error.SetParamsFailed;
         }
     }
@@ -158,7 +155,6 @@ pub const Controller = struct {
 
         const cqe = cqes[0];
         if (cqe.res < 0) {
-            std.log.err("GET_DEV_INFO failed with error: {d}", .{cqe.res});
             return error.GetDeviceInfoFailed;
         }
     }
@@ -204,7 +200,6 @@ pub const Controller = struct {
 
         const cqe = cqes[0];
         if (cqe.res < 0) {
-            std.log.err("START_DEV failed with error: {d}", .{cqe.res});
             return error.StartDeviceFailed;
         }
     }
@@ -236,7 +231,6 @@ pub const Controller = struct {
 
         const cqe = cqes[0];
         if (cqe.res < 0) {
-            std.log.err("STOP_DEV failed with error: {d}", .{cqe.res});
             return error.StopDeviceFailed;
         }
     }
@@ -268,7 +262,6 @@ pub const Controller = struct {
 
         const cqe = cqes[0];
         if (cqe.res < 0) {
-            std.log.err("DEL_DEV failed with error: {d}", .{cqe.res});
             return error.DeleteDeviceFailed;
         }
     }

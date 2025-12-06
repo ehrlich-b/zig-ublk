@@ -24,7 +24,7 @@
 //!
 //! // Set up queue and start device
 //! var queue = try ublk.Queue.init(dev_id, 0, 64, allocator);
-//! defer queue.deinit(allocator);
+//! defer queue.deinit();
 //!
 //! try queue.prime();
 //! try ctrl.startDevice(dev_id);
@@ -88,6 +88,24 @@ pub const UBLK_ATTR_READ_ONLY = params.UBLK_ATTR_READ_ONLY;
 pub const UBLK_ATTR_ROTATIONAL = params.UBLK_ATTR_ROTATIONAL;
 pub const UBLK_ATTR_VOLATILE_CACHE = params.UBLK_ATTR_VOLATILE_CACHE;
 pub const UBLK_ATTR_FUA = params.UBLK_ATTR_FUA;
+
+// Feature flags
+pub const UBLK_F_SUPPORT_ZERO_COPY = uapi.UBLK_F_SUPPORT_ZERO_COPY;
+pub const UBLK_F_URING_CMD_COMP_IN_TASK = uapi.UBLK_F_URING_CMD_COMP_IN_TASK;
+pub const UBLK_F_NEED_GET_DATA = uapi.UBLK_F_NEED_GET_DATA;
+pub const UBLK_F_USER_RECOVERY = uapi.UBLK_F_USER_RECOVERY;
+pub const UBLK_F_USER_RECOVERY_REISSUE = uapi.UBLK_F_USER_RECOVERY_REISSUE;
+pub const UBLK_F_UNPRIVILEGED_DEV = uapi.UBLK_F_UNPRIVILEGED_DEV;
+pub const UBLK_F_CMD_IOCTL_ENCODE = uapi.UBLK_F_CMD_IOCTL_ENCODE;
+pub const UBLK_F_USER_COPY = uapi.UBLK_F_USER_COPY;
+pub const UBLK_F_ZONED = uapi.UBLK_F_ZONED;
+
+// Device state
+pub const DeviceState = uapi.DeviceState;
+
+// Path helpers
+pub const devicePath = uapi.devicePath;
+pub const blockDevicePath = uapi.blockDevicePath;
 
 // ============================================================================
 // Tests - Run all module tests

@@ -178,6 +178,54 @@ pub const UBLK_CONTROL_PATH = "/dev/ublk-control";
 pub const IO_BUFFER_SIZE_PER_TAG: usize = 64 * 1024;
 
 // ============================================================================
+// Feature Flags (UBLK_F_*)
+// ============================================================================
+
+/// Support zero-copy IO
+pub const UBLK_F_SUPPORT_ZERO_COPY: u64 = 1 << 0;
+/// Complete URING_CMD in task context
+pub const UBLK_F_URING_CMD_COMP_IN_TASK: u64 = 1 << 1;
+/// Need GET_DATA for write requests
+pub const UBLK_F_NEED_GET_DATA: u64 = 1 << 2;
+/// User recovery support
+pub const UBLK_F_USER_RECOVERY: u64 = 1 << 3;
+/// Reissue on recovery
+pub const UBLK_F_USER_RECOVERY_REISSUE: u64 = 1 << 4;
+/// Unprivileged device
+pub const UBLK_F_UNPRIVILEGED_DEV: u64 = 1 << 5;
+/// Commands use ioctl encoding
+pub const UBLK_F_CMD_IOCTL_ENCODE: u64 = 1 << 6;
+/// User-space copy for IO data
+pub const UBLK_F_USER_COPY: u64 = 1 << 7;
+/// Zoned block device
+pub const UBLK_F_ZONED: u64 = 1 << 8;
+
+// ============================================================================
+// Device States (UBLK_S_DEV_*)
+// ============================================================================
+
+/// Device state enum
+pub const DeviceState = enum(u16) {
+    dead = 0,
+    live = 1,
+    quiesced = 2,
+};
+
+// ============================================================================
+// Path Helpers
+// ============================================================================
+
+/// Format device character path into buffer (e.g., "/dev/ublkc0")
+pub fn devicePath(buf: *[32]u8, dev_id: u32) []const u8 {
+    return std.fmt.bufPrint(buf, "/dev/ublkc{d}", .{dev_id}) catch unreachable;
+}
+
+/// Format block device path into buffer (e.g., "/dev/ublkb0")
+pub fn blockDevicePath(buf: *[32]u8, dev_id: u32) []const u8 {
+    return std.fmt.bufPrint(buf, "/dev/ublkb{d}", .{dev_id}) catch unreachable;
+}
+
+// ============================================================================
 // Tests
 // ============================================================================
 
@@ -263,4 +311,28 @@ test "CtrlCmd enum values" {
 test "IoCmd enum values" {
     try std.testing.expectEqual(@as(u8, 0x20), @intFromEnum(IoCmd.fetch_req));
     try std.testing.expectEqual(@as(u8, 0x21), @intFromEnum(IoCmd.commit_and_fetch_req));
+}
+
+test "feature flag values" {
+    try std.testing.expectEqual(@as(u64, 0x01), UBLK_F_SUPPORT_ZERO_COPY);
+    try std.testing.expectEqual(@as(u64, 0x02), UBLK_F_URING_CMD_COMP_IN_TASK);
+    try std.testing.expectEqual(@as(u64, 0x04), UBLK_F_NEED_GET_DATA);
+    try std.testing.expectEqual(@as(u64, 0x40), UBLK_F_CMD_IOCTL_ENCODE);
+    try std.testing.expectEqual(@as(u64, 0x80), UBLK_F_USER_COPY);
+}
+
+test "device state values" {
+    try std.testing.expectEqual(@as(u16, 0), @intFromEnum(DeviceState.dead));
+    try std.testing.expectEqual(@as(u16, 1), @intFromEnum(DeviceState.live));
+    try std.testing.expectEqual(@as(u16, 2), @intFromEnum(DeviceState.quiesced));
+}
+
+test "path helpers" {
+    var buf: [32]u8 = undefined;
+
+    const char_path = devicePath(&buf, 0);
+    try std.testing.expectEqualStrings("/dev/ublkc0", char_path);
+
+    const block_path = blockDevicePath(&buf, 5);
+    try std.testing.expectEqualStrings("/dev/ublkb5", block_path);
 }

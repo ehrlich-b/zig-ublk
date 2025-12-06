@@ -156,7 +156,7 @@ pub fn main() !void {
         std.debug.print("    ERROR: Queue setup failed: {}\n", .{err});
         return;
     };
-    defer queue.deinit(allocator);
+    defer queue.deinit();
     std.debug.print("    SUCCESS: Queue 0 ready\n\n", .{});
 
     // Create queue context and spawn thread

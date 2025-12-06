@@ -84,7 +84,7 @@ pub fn main() !void {
         std.debug.print("Queue init failed: {}\n", .{err});
         return;
     };
-    defer queue.deinit(allocator);
+    defer queue.deinit();
 
     var ctx = QueueContext{
         .queue = &queue,

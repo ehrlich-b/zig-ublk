@@ -23,6 +23,7 @@ pub const TagState = enum {
 
 /// Queue runner handles IO for a single ublk queue
 pub const Queue = struct {
+    allocator: std.mem.Allocator,
     device_id: u32,
     queue_id: u16,
     depth: u16,
@@ -105,6 +106,7 @@ pub const Queue = struct {
         const descriptors: []volatile uapi.UblksrvIoDesc = @as([*]volatile uapi.UblksrvIoDesc, @ptrCast(@alignCast(desc_mmap.ptr)))[0..depth];
 
         return Queue{
+            .allocator = allocator,
             .device_id = device_id,
             .queue_id = queue_id,
             .depth = depth,
@@ -118,8 +120,8 @@ pub const Queue = struct {
         };
     }
 
-    pub fn deinit(self: *Queue, allocator: std.mem.Allocator) void {
-        allocator.free(self.tag_states);
+    pub fn deinit(self: *Queue) void {
+        self.allocator.free(self.tag_states);
         std.posix.munmap(self.buf_mmap);
         std.posix.munmap(self.desc_mmap);
         self.uring.deinit();
@@ -207,8 +209,7 @@ pub const Queue = struct {
             if (tag >= self.depth) continue;
 
             if (result < 0) {
-                // Error from kernel
-                std.log.err("Queue {d} tag {d}: error {d}", .{ self.queue_id, tag, result });
+                // Error from kernel - skip this tag
                 continue;
             }
 
@@ -242,8 +243,7 @@ pub const Queue = struct {
                     }
                 },
                 .owned => {
-                    // Shouldn't get completion in owned state
-                    std.log.warn("Queue {d} tag {d}: unexpected completion in owned state", .{ self.queue_id, tag });
+                    // Shouldn't get completion in owned state - ignore
                 },
             }
         }
