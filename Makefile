@@ -14,7 +14,7 @@ build:
 
 # Build for VM (baseline x86_64, no fancy CPU features)
 build-vm:
-	zig build -Dcpu=baseline
+	zig build -Dcpu=baseline -Doptimize=ReleaseFast
 
 test:
 	zig build test
@@ -69,8 +69,8 @@ vm-check:
 # Copy binary to VM
 vm-copy: vm-check build-vm
 	@echo "Copying zig-ublk binaries to VM..."
-	@$(VM_SSH) "mkdir -p $(VM_DIR); sudo killall example-null example-memory 2>/dev/null || true"
-	@$(VM_SCP) zig-out/bin/example-null zig-out/bin/example-memory $(VM_USER)@$(VM_HOST):$(VM_DIR)/
+	@$(VM_SSH) "mkdir -p $(VM_DIR); sudo killall example-null example-memory example-null-bench 2>/dev/null || true"
+	@$(VM_SCP) zig-out/bin/example-null zig-out/bin/example-memory zig-out/bin/example-null-bench $(VM_USER)@$(VM_HOST):$(VM_DIR)/
 	@echo "Copied."
 
 # Run simple e2e test on VM (null backend)
@@ -86,6 +86,13 @@ vm-memory-e2e: vm-copy
 	@$(VM_SCP) scripts/vm-memory-e2e.sh $(VM_USER)@$(VM_HOST):$(VM_DIR)/
 	@timeout 60 $(VM_SSH) "cd $(VM_DIR) && chmod +x ./vm-memory-e2e.sh && ./vm-memory-e2e.sh" || \
 		(echo "Test timed out" && $(MAKE) vm-trace && exit 1)
+
+# Run IOPS benchmark
+vm-benchmark: vm-copy
+	@echo "Running IOPS benchmark..."
+	@$(VM_SCP) scripts/vm-benchmark.sh $(VM_USER)@$(VM_HOST):$(VM_DIR)/
+	@timeout 120 $(VM_SSH) "cd $(VM_DIR) && chmod +x ./vm-benchmark.sh && ./vm-benchmark.sh" || \
+		(echo "Benchmark timed out" && exit 1)
 
 # Hard reset VM
 vm-reset: vm-check
