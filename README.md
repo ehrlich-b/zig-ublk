@@ -74,7 +74,7 @@ pub fn main() !void {
     var dev_info = std.mem.zeroInit(ublk.UblksrvCtrlDevInfo, .{});
     dev_info.nr_hw_queues = 1;
     dev_info.queue_depth = 64;
-    dev_info.max_io_buf_bytes = 512 * 1024;
+    dev_info.max_io_buf_bytes = 64 * 1024;
     dev_info.dev_id = 0xFFFF_FFFF; // Auto-assign
     dev_info.ublksrv_pid = @intCast(std.os.linux.getpid());
     dev_info.flags = 0x02; // UBLK_F_CMD_IOCTL_ENCODE

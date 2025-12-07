@@ -282,4 +282,5 @@ The stdlib IoUring does NOT support SQE128/CQE32:
   - **Answer:** The cmd area is bytes 48-127. Use `sqe.getCmd(T)` helper
 - [x] Figure out CQE32 handling (stdlib cqe is 16 bytes)
   - **Answer:** Created IoUringCqe32 with 16-byte `big_cqe` field
-- [ ] Test extern struct alignment matches kernel expectations
+- [x] Test extern struct alignment matches kernel expectations
+  - **Answer:** Verified via VM testing - all operations work correctly

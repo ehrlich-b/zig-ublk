@@ -105,7 +105,12 @@ VM configuration is in `Makefile.local` (gitignored).
 
 ## Workflow
 
-**Commit early, commit often.** After any meaningful chunk of work, do a single-sentence commit and push. Don't batch up changes.
+**Commit meaningful work, not noise.** A good commit contains a complete unit of work - a feature, a fix, or a significant refactor. Don't make micro-commits for:
+- Trivial doc updates
+- Fixing a typo you just introduced
+- Each small edit in a series
+
+Batch related changes together. If you're updating docs as part of implementing something, commit them together. Doc-only commits should only happen when the documentation itself is the work (e.g., adding a new guide).
 
 ## Notes
 

@@ -27,11 +27,11 @@
 
 ### 0.2 `std.os.linux` - Syscalls
 
-**Status:** Need to explore
+**Status:** DONE
 
-- [ ] Test posix.open with device files
-- [ ] Test linux.mmap patterns
-- [ ] Document error handling patterns
+- [x] Test posix.open with device files - used in Controller.init(), Queue.init()
+- [x] Test linux.mmap patterns - used in Queue.init() for descriptors and buffers
+- [x] Document error handling patterns - see docs/idioms.md
 
 ### 0.3 Build System
 
@@ -44,25 +44,36 @@
 
 ### 0.4 Packed Structs and Kernel ABI
 
-**Status:** Partially researched
+**Status:** DONE
 
 **Findings:**
 - [x] Use `extern struct` for kernel ABI (C layout)
 - [x] Comptime size checks work: `comptime { std.debug.assert(@sizeOf(T) == N); }`
-- [x] Current struct definitions in src/root.zig pass size tests
-- [ ] Need to verify alignment matches kernel expectations
+- [x] All struct definitions have size assertions (UblksrvCtrlCmd=32, IoCmd=16, IoDesc=24, DevInfo=64)
+- [x] Alignment verified via VM testing - kernel accepts all our structures
 
 ### 0.5 Error Handling
 
-**Status:** Need to explore
+**Status:** DONE
+
+- [x] Error sets used throughout (InitError, ControlError, QueueError)
+- [x] `try`/`catch` patterns documented in docs/idioms.md
+- [x] `errdefer` for resource cleanup (e.g., ring.deinit on init failure)
 
 ### 0.6 Memory Management
 
-**Status:** Need to explore
+**Status:** DONE
+
+- [x] Allocator pattern used correctly (Queue.init takes allocator, stores it, uses in deinit)
+- [x] mmap/munmap for kernel memory regions
+- [x] No memory leaks verified via GPA in examples
 
 ### 0.7 Interfaces and Callbacks
 
-**Status:** Need to explore
+**Status:** DONE
+
+- [x] IoHandler function pointer type defined in queue.zig
+- [x] Callbacks used for IO handling: `*const fn (*Queue, u16, UblksrvIoDesc, []u8) i32`
 
 ---
 
@@ -119,7 +130,11 @@
 
 - [x] Benchmarks vs go-ublk - **118K IOPS** (zig-ublk) vs ~100K IOPS (go-ublk documented)
 - [x] Examples with documentation - README.md updated, examples/README.md added
-- [x] Test suite - unit tests for ioctl encoding, ring module, uapi enums (requires root for integration tests)
+- [x] Test suite:
+  - 22 unit tests (ioctl encoding, ring module, uapi enums, params)
+  - VM integration tests: vm-simple-e2e, vm-memory-e2e, vm-benchmark
+  - vm-fuzz: 20 comprehensive tests (data integrity, boundaries, concurrent I/O)
+  - vm-stress: stability testing (repeated cycles)
 - [x] API documentation - `zig build docs` generates HTML docs in zig-out/docs/
 
 ### Benchmark Results (2025-12-06)

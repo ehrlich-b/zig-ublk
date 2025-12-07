@@ -387,6 +387,6 @@ _ = queue.processCompletions(nullHandler);
 
 ### Could Improve
 
-1. **File organization** - root.zig should be split (see review/root.zig.md)
-2. **Magic numbers** - IO operation codes should be named constants
+1. ~~**File organization** - root.zig should be split~~ - DONE (uapi.zig, params.zig, ring.zig, control.zig, queue.zig)
+2. ~~**Magic numbers** - IO operation codes should be named constants~~ - DONE (IoOp enum in uapi.zig)
 3. **Logging** - `std.debug.print` is fine for dev, `std.log` for production
