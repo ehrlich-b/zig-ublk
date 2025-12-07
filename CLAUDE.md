@@ -11,8 +11,9 @@ The Go code is not sacred - it's just proof the protocol works. Our goal is clea
 ## Anchor Documents
 
 - `README.md` - Project overview and usage
-- `TODO.md` - Development roadmap (Phase 0: Zig Bootcamp is critical!)
+- `TODO.md` - Development roadmap
 - `CLAUDE.md` - This file
+- `docs/MULTI_QUEUE_DESIGN.md` - Multi-queue implementation design (Phase 6)
 
 ## Zig Learning Docs (THE BIBLE)
 

@@ -152,3 +152,37 @@ Key optimizations:
 1. No debug prints in hot path (syscall overhead)
 2. ReleaseFast build (-Doptimize=ReleaseFast)
 3. Higher queue depth (128 vs 64)
+
+---
+
+## Phase 6: Multi-Queue Support
+
+**Design Doc:** [docs/MULTI_QUEUE_DESIGN.md](docs/MULTI_QUEUE_DESIGN.md)
+
+**Goal:** Feature parity with go-ublk - support multiple IO queues for parallel processing across CPU cores.
+
+### 6.1 Core Infrastructure
+- [ ] Create `src/device.zig` - Device struct to manage multiple queues
+- [ ] Implement multi-queue initialization (nr_hw_queues > 1)
+- [ ] Implement synchronized startup (all queues prime before START_DEV)
+- [ ] Implement clean shutdown (signal all threads, join, cleanup)
+
+### 6.2 Thread-Safe Backends
+- [ ] Add sharded RwLock to memory backend
+- [ ] Update examples/memory.zig for thread safety
+- [ ] Document thread-safety requirements for custom backends
+
+### 6.3 CPU Affinity (Optional)
+- [ ] Implement sched_setaffinity wrapper
+- [ ] Add cpu_affinity config option to Device
+- [ ] Document NUMA optimization considerations
+
+### 6.4 Testing & Benchmarking
+- [ ] Add vm-multiqueue-e2e.sh test script
+- [ ] Add vm-multiqueue-bench.sh for scaling tests
+- [ ] Measure IOPS scaling: 1, 2, 4, 8 queues
+- [ ] Update benchmark results
+
+### Expected Results
+- Near-linear IOPS scaling with queue count (CPU-bound)
+- 4 queues on 4-core system: ~400K+ IOPS (vs 118K single-queue)
