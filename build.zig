@@ -81,4 +81,25 @@ pub fn build(b: *std.Build) void {
         }),
     });
     b.installArtifact(example_null_bench);
+
+    // Example: multi-queue null device
+    const example_multiqueue = b.addExecutable(.{
+        .name = "example-multiqueue",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/multiqueue.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "zig_ublk", .module = lib_mod },
+            },
+        }),
+    });
+    b.installArtifact(example_multiqueue);
+
+    const run_example_multiqueue = b.addRunArtifact(example_multiqueue);
+    if (b.args) |args| {
+        run_example_multiqueue.addArgs(args);
+    }
+    const run_example_multiqueue_step = b.step("run-example-multiqueue", "Run the multi-queue example");
+    run_example_multiqueue_step.dependOn(&run_example_multiqueue.step);
 }

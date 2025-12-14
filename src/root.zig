@@ -41,6 +41,7 @@ pub const params = @import("params.zig");
 pub const ring = @import("ring.zig");
 pub const control = @import("control.zig");
 pub const queue = @import("queue.zig");
+pub const device = @import("device.zig");
 
 // ============================================================================
 // Convenience Re-exports (top-level access)
@@ -57,6 +58,9 @@ pub const Controller = control.Controller;
 // Queue
 pub const Queue = queue.Queue;
 pub const TagState = queue.TagState;
+
+// Device (multi-queue)
+pub const Device = device.Device;
 
 // UAPI structures
 pub const UblksrvCtrlCmd = uapi.UblksrvCtrlCmd;

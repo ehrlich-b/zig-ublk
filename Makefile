@@ -50,7 +50,7 @@ endif
 # VM Testing (requires VM_HOST, VM_USER configured)
 #==============================================================================
 
-.PHONY: vm-check vm-copy vm-simple-e2e vm-reset vm-trace
+.PHONY: vm-check vm-copy vm-simple-e2e vm-multiqueue-e2e vm-multiqueue-bench vm-reset vm-trace
 
 # Check VM configuration
 vm-check:
@@ -69,8 +69,8 @@ vm-check:
 # Copy binary to VM
 vm-copy: vm-check build-vm
 	@echo "Copying zig-ublk binaries to VM..."
-	@$(VM_SSH) "mkdir -p $(VM_DIR); sudo killall example-null example-memory example-null-bench 2>/dev/null || true"
-	@$(VM_SCP) zig-out/bin/example-null zig-out/bin/example-memory zig-out/bin/example-null-bench $(VM_USER)@$(VM_HOST):$(VM_DIR)/
+	@$(VM_SSH) "mkdir -p $(VM_DIR); sudo killall example-null example-memory example-null-bench example-multiqueue 2>/dev/null || true"
+	@$(VM_SCP) zig-out/bin/example-null zig-out/bin/example-memory zig-out/bin/example-null-bench zig-out/bin/example-multiqueue $(VM_USER)@$(VM_HOST):$(VM_DIR)/
 	@echo "Copied."
 
 # Run simple e2e test on VM (null backend)
@@ -94,6 +94,20 @@ vm-benchmark: vm-copy
 	@timeout 120 $(VM_SSH) "cd $(VM_DIR) && chmod +x ./vm-benchmark.sh && ./vm-benchmark.sh" || \
 		(echo "Benchmark timed out" && exit 1)
 
+# Run multi-queue e2e test
+vm-multiqueue-e2e: vm-copy
+	@echo "Running multi-queue I/O test..."
+	@$(VM_SCP) scripts/vm-multiqueue-e2e.sh $(VM_USER)@$(VM_HOST):$(VM_DIR)/
+	@timeout 120 $(VM_SSH) "cd $(VM_DIR) && chmod +x ./vm-multiqueue-e2e.sh && ./vm-multiqueue-e2e.sh 4" || \
+		(echo "Test timed out" && $(MAKE) vm-trace && exit 1)
+
+# Run multi-queue scaling benchmark
+vm-multiqueue-bench: vm-copy
+	@echo "Running multi-queue scaling benchmark..."
+	@$(VM_SCP) scripts/vm-multiqueue-bench.sh $(VM_USER)@$(VM_HOST):$(VM_DIR)/
+	@timeout 300 $(VM_SSH) "cd $(VM_DIR) && chmod +x ./vm-multiqueue-bench.sh && ./vm-multiqueue-bench.sh" || \
+		(echo "Benchmark timed out" && exit 1)
+
 # Run comprehensive fuzz test
 vm-fuzz: vm-copy
 	@echo "Running comprehensive fuzz test..."
@@ -108,29 +122,32 @@ vm-stress: vm-copy
 	@timeout 900 $(VM_SSH) "cd $(VM_DIR) && chmod +x ./vm-stress.sh ./vm-memory-e2e.sh ./vm-benchmark.sh && ./vm-stress.sh 5" || \
 		(echo "Stress test timed out" && exit 1)
 
-# Run the full gauntlet (e2e + fuzz + stress)
+# Run the full gauntlet (e2e + fuzz + stress + multiqueue)
 vm-gauntlet: vm-copy
 	@echo "=== RUNNING THE GAUNTLET ==="
 	@echo ""
-	@echo "[1/4] Simple E2E test..."
+	@echo "[1/5] Simple E2E test..."
 	@$(MAKE) vm-simple-e2e
 	@echo ""
-	@echo "[2/4] Memory E2E test..."
+	@echo "[2/5] Memory E2E test..."
 	@$(MAKE) vm-memory-e2e
 	@echo ""
-	@echo "[3/4] Fuzz test..."
+	@echo "[3/5] Multi-queue E2E test..."
+	@$(MAKE) vm-multiqueue-e2e
+	@echo ""
+	@echo "[4/5] Fuzz test..."
 	@$(MAKE) vm-fuzz
 	@echo ""
-	@echo "[4/4] Stress test..."
+	@echo "[5/5] Stress test..."
 	@$(MAKE) vm-stress
 	@echo ""
 	@echo "=== GAUNTLET COMPLETE ==="
 
 # Debug - run ad-hoc commands on VM (edit command as needed)
 vm-debug: vm-copy
-	@echo "Running debug test (1MB blocks with verify - should be split to 64KB)..."
-	@$(VM_SSH) "cd $(VM_DIR) && sudo pkill example-memory 2>/dev/null || true; sleep 1; sudo modprobe -r ublk_drv 2>/dev/null || true; sleep 1; sudo modprobe ublk_drv; sleep 1"
-	@timeout 120 $(VM_SSH) "cd $(VM_DIR) && sudo ./example-memory 2>&1 & sleep 5 && echo 'Testing 1MB blocks with verify...' && sudo fio --name=test1mb --filename=/dev/ublkb0 --rw=write --bs=1M --size=16M --ioengine=libaio --direct=1 --verify=crc32c --verify_fatal=1 --do_verify=1 2>&1; echo 'Done'; sudo pkill example-memory || true" || (echo "Debug test timed out or failed")
+	@echo "Running multiqueue debug test..."
+	@$(VM_SSH) "cd $(VM_DIR) && sudo pkill example-multiqueue 2>/dev/null || true; sleep 1; sudo modprobe -r ublk_drv 2>/dev/null || true; sleep 1; sudo modprobe ublk_drv; sleep 1"
+	@timeout 90 $(VM_SSH) "cd $(VM_DIR) && sudo ./example-multiqueue 2 2>&1 & sleep 8 && ls -la /dev/ublkb* 2>&1 && echo 'Read:' && timeout 10 sudo dd if=/dev/ublkb0 of=/dev/null bs=4k count=10 iflag=direct 2>&1 && echo 'Write:' && timeout 10 sudo dd if=/dev/zero of=/dev/ublkb0 bs=4k count=10 oflag=direct 2>&1 && echo 'All OK'; sudo pkill -f example-multiqueue 2>/dev/null; exit 0"
 
 # Hard reset VM
 vm-reset: vm-check
@@ -169,14 +186,16 @@ help:
 	@echo "  clean          Remove build artifacts"
 	@echo ""
 	@echo "VM targets (require Makefile.local):"
-	@echo "  vm-check       Verify VM configuration"
-	@echo "  vm-copy        Copy binaries to VM"
-	@echo "  vm-simple-e2e  Run null backend I/O test on VM"
-	@echo "  vm-memory-e2e  Run memory backend I/O test on VM"
-	@echo "  vm-benchmark   Run IOPS benchmark"
-	@echo "  vm-fuzz        Run comprehensive fuzz test (data integrity, edge cases)"
-	@echo "  vm-stress      Run stress test (5 cycles of e2e + benchmark)"
-	@echo "  vm-gauntlet    Run ALL tests (e2e + fuzz + stress)"
-	@echo "  vm-reset       Hard reset VM"
+	@echo "  vm-check            Verify VM configuration"
+	@echo "  vm-copy             Copy binaries to VM"
+	@echo "  vm-simple-e2e       Run null backend I/O test on VM"
+	@echo "  vm-memory-e2e       Run memory backend I/O test on VM"
+	@echo "  vm-multiqueue-e2e   Run multi-queue I/O test on VM"
+	@echo "  vm-benchmark        Run IOPS benchmark (single queue)"
+	@echo "  vm-multiqueue-bench Run multi-queue scaling benchmark"
+	@echo "  vm-fuzz             Run comprehensive fuzz test"
+	@echo "  vm-stress           Run stress test (5 cycles)"
+	@echo "  vm-gauntlet         Run ALL tests"
+	@echo "  vm-reset            Hard reset VM"
 	@echo ""
 	@echo "See docs/VM_TESTING.md for VM setup instructions."

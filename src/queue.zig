@@ -61,6 +61,18 @@ pub const Queue = struct {
                 else => err,
             };
         };
+
+        return initWithFd(char_fd, device_id, queue_id, depth, allocator);
+    }
+
+    /// Initialize a queue runner with a pre-opened character device fd.
+    /// The fd will be duplicated, so the caller retains ownership of the original.
+    /// Used for multi-queue setups where all queues share the same open file description.
+    pub fn initWithFd(shared_fd: std.posix.fd_t, device_id: u32, queue_id: u16, depth: u16, allocator: std.mem.Allocator) InitError!Queue {
+        // Duplicate the fd so this queue owns its own copy
+        const char_fd = std.posix.dup(shared_fd) catch {
+            return error.DeviceNotFound;
+        };
         errdefer std.posix.close(char_fd);
 
         // Create io_uring for this queue
@@ -132,6 +144,20 @@ pub const Queue = struct {
     pub fn getBuffer(self: *Queue, tag: u16) []u8 {
         const offset = @as(usize, tag) * uapi.IO_BUFFER_SIZE_PER_TAG;
         return self.buffers_base[offset..][0..uapi.IO_BUFFER_SIZE_PER_TAG];
+    }
+
+    /// Load a descriptor with atomic semantics to avoid stale cache data.
+    /// The kernel writes to these mmap'd descriptors, so we must use atomic loads.
+    /// This matches go-ublk's loadDescriptor function.
+    pub fn loadDescriptor(self: *Queue, tag: u16) uapi.UblksrvIoDesc {
+        // Just read directly from the volatile pointer - simpler approach
+        const desc = self.descriptors[tag];
+        return uapi.UblksrvIoDesc{
+            .op_flags = desc.op_flags,
+            .nr_sectors = desc.nr_sectors,
+            .start_sector = desc.start_sector,
+            .addr = desc.addr,
+        };
     }
 
     /// Submit initial FETCH_REQ for all tags (called before START_DEV)

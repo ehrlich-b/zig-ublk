@@ -1,7 +1,7 @@
 //! Memory block device example (RAM disk)
 //!
 //! Creates a working RAM-backed block device that:
-//! - Stores data in memory
+//! - Stores data in memory with thread-safe sharded locking
 //! - Persists for the lifetime of the process
 //! - Can be tested with: dd if=/dev/zero of=/dev/ublkb0 bs=4k count=1
 //!                  then: dd if=/dev/ublkb0 bs=4k count=1 | hexdump -C
@@ -9,29 +9,121 @@
 const std = @import("std");
 const ublk = @import("zig_ublk");
 
-/// Memory backend context - holds the backing storage
+/// Thread-safe memory backend with sharded RwLocks
+///
+/// Uses 64KB shards to allow concurrent access to different regions of storage.
+/// Reads can proceed in parallel; writes lock only the affected shards.
 const MemoryBackend = struct {
     storage: []u8,
+    shards: []std.Thread.RwLock,
     allocator: std.mem.Allocator,
+
+    const SHARD_SIZE: usize = 64 * 1024; // 64KB per shard
 
     pub fn init(allocator: std.mem.Allocator, size: usize) !MemoryBackend {
         const storage = try allocator.alloc(u8, size);
+        errdefer allocator.free(storage);
         @memset(storage, 0); // Initialize to zeros
+
+        // Calculate number of shards
+        const num_shards = (size + SHARD_SIZE - 1) / SHARD_SIZE;
+        const shards = try allocator.alloc(std.Thread.RwLock, num_shards);
+        for (shards) |*shard| {
+            shard.* = .{};
+        }
+
         return .{
             .storage = storage,
+            .shards = shards,
             .allocator = allocator,
         };
     }
 
     pub fn deinit(self: *MemoryBackend) void {
+        self.allocator.free(self.shards);
         self.allocator.free(self.storage);
+    }
+
+    /// Perform a read operation with shared locks on affected shards
+    pub fn read(self: *MemoryBackend, offset: usize, length: usize, buffer: []u8) i32 {
+        if (offset + length > self.storage.len) {
+            return -28; // -ENOSPC
+        }
+        if (length > buffer.len) {
+            return -22; // -EINVAL
+        }
+
+        const start_shard = offset / SHARD_SIZE;
+        const end_shard = (offset + length - 1) / SHARD_SIZE;
+
+        // Lock all affected shards for reading (shared)
+        for (self.shards[start_shard .. end_shard + 1]) |*shard| {
+            shard.lockShared();
+        }
+        defer {
+            for (self.shards[start_shard .. end_shard + 1]) |*shard| {
+                shard.unlockShared();
+            }
+        }
+
+        @memcpy(buffer[0..length], self.storage[offset..][0..length]);
+        return 0;
+    }
+
+    /// Perform a write operation with exclusive locks on affected shards
+    pub fn write(self: *MemoryBackend, offset: usize, length: usize, buffer: []const u8) i32 {
+        if (offset + length > self.storage.len) {
+            return -28; // -ENOSPC
+        }
+        if (length > buffer.len) {
+            return -22; // -EINVAL
+        }
+
+        const start_shard = offset / SHARD_SIZE;
+        const end_shard = (offset + length - 1) / SHARD_SIZE;
+
+        // Lock all affected shards for writing (exclusive)
+        for (self.shards[start_shard .. end_shard + 1]) |*shard| {
+            shard.lock();
+        }
+        defer {
+            for (self.shards[start_shard .. end_shard + 1]) |*shard| {
+                shard.unlock();
+            }
+        }
+
+        @memcpy(self.storage[offset..][0..length], buffer[0..length]);
+        return 0;
+    }
+
+    /// Discard (zero) a region with exclusive locks on affected shards
+    pub fn discard(self: *MemoryBackend, offset: usize, length: usize) i32 {
+        if (offset + length > self.storage.len) {
+            return -28; // -ENOSPC
+        }
+
+        const start_shard = offset / SHARD_SIZE;
+        const end_shard = (offset + length - 1) / SHARD_SIZE;
+
+        // Lock all affected shards for writing (exclusive)
+        for (self.shards[start_shard .. end_shard + 1]) |*shard| {
+            shard.lock();
+        }
+        defer {
+            for (self.shards[start_shard .. end_shard + 1]) |*shard| {
+                shard.unlock();
+            }
+        }
+
+        @memset(self.storage[offset..][0..length], 0);
+        return 0;
     }
 };
 
 /// Global backend pointer (needed for handler callback)
 var g_backend: ?*MemoryBackend = null;
 
-/// Memory backend IO handler
+/// Thread-safe memory backend IO handler
 fn memoryHandler(queue: *ublk.Queue, tag: u16, desc: ublk.UblksrvIoDesc, buffer: []u8) i32 {
     const backend = g_backend orelse return -5; // -EIO
     const op = desc.getIoOp();
@@ -43,37 +135,12 @@ fn memoryHandler(queue: *ublk.Queue, tag: u16, desc: ublk.UblksrvIoDesc, buffer:
     _ = queue;
     _ = tag;
 
-    // Bounds check
-    if (offset + length > backend.storage.len) {
-        std.log.err("IO out of bounds: offset={d}, length={d}, storage={d}", .{ offset, length, backend.storage.len });
-        return -28; // -ENOSPC
-    }
-
     if (op) |io_op| {
         switch (io_op) {
-            .read => {
-                // Copy from storage to buffer
-                if (length <= buffer.len) {
-                    @memcpy(buffer[0..length], backend.storage[offset..][0..length]);
-                }
-                return 0;
-            },
-            .write => {
-                // Copy from buffer to storage
-                if (length <= buffer.len) {
-                    @memcpy(backend.storage[offset..][0..length], buffer[0..length]);
-                }
-                return 0;
-            },
-            .flush => {
-                // Memory is always synchronized
-                return 0;
-            },
-            .discard => {
-                // Zero the discarded region (optional, could also be a no-op)
-                @memset(backend.storage[offset..][0..length], 0);
-                return 0;
-            },
+            .read => return backend.read(offset, length, buffer),
+            .write => return backend.write(offset, length, buffer),
+            .flush => return 0, // Memory is always synchronized
+            .discard => return backend.discard(offset, length),
             else => {
                 std.log.warn("Unsupported operation: {}", .{io_op});
                 return -95; // -EOPNOTSUPP
@@ -140,7 +207,7 @@ pub fn main() !void {
     };
     defer backend.deinit();
     g_backend = &backend;
-    std.debug.print("    SUCCESS\n\n", .{});
+    std.debug.print("    SUCCESS ({d} shards for thread-safe access)\n\n", .{backend.shards.len});
 
     // Initialize controller
     std.debug.print("[1] Opening control device...\n", .{});
